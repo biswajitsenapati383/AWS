@@ -1,58 +1,47 @@
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.Optional;
+// src/components/Shared/FileDownload.jsx
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+export function download(data, fileName) {
+    const safeFileName = sanitizeFileName(fileName);
 
-public class HttpService {
-    private final HttpClient client = HttpClient.newHttpClient();
-    private final ObjectMapper mapper = new ObjectMapper();
+    // Ensure blob is always valid PDF payload
+    const blob = (data instanceof Blob)
+        ? data
+        : new Blob([data], { type: 'application/pdf' });
 
-    public <T> T sendRequest(
-            String url,
-            String method,
-            Optional<Object> body,
-            TypeReference<T> responseType
-    ) throws Exception {
-
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Content-Type", "application/json");
-
-        if (body.isPresent()) {
-            String json = mapper.writeValueAsString(body.get());
-            builder.method(method, HttpRequest.BodyPublishers.ofString(json));
-        } else {
-            builder.method(method, HttpRequest.BodyPublishers.noBody());
-        }
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        // convert JSON to object/list/etc.
-        return mapper.readValue(response.body(), responseType);
+    // IE / Legacy Edge
+    if (window.navigator.msSaveOrOpenBlob) {
+        window.navigator.msSaveOrOpenBlob(blob, safeFileName);
+        return;
     }
+
+    // Standard modern browsers
+    const link = document.createElement('a');
+    const url = window.URL.createObjectURL(blob);
+
+    link.href = url;
+    link.setAttribute('download', safeFileName);
+    link.rel = 'noopener noreferrer';
+    link.style.display = 'none';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    window.URL.revokeObjectURL(url);
 }
 
+/**
+ * Sanitizes filenames to prevent DOM-XSS and HTML attribute injection.
+ * Removes unsafe characters and enforces a whitelist.
+ */
+function sanitizeFileName(name) {
+    if (typeof name !== 'string') return 'download.pdf';
 
+    // Whitelist: letters, numbers, dot, dash, underscore
+    const cleaned = name
+        .replace(/[^a-zA-Z0-9._-]/g, "_") 
+        .trim()
+        .slice(0, 150);
 
-List<Employee> employees = httpService.sendRequest(
-    "http://localhost:5000/api/Employee",
-    "GET",
-    Optional.empty(),
-    new TypeReference<List<Employee>>() {}
-);
-
-
-
-
-Employee emp = new Employee(1, "John Doe", "Developer", "IT");
-
-Employee created = httpService.sendRequest(
-    "http://localhost:5000/api/Employee",
-    "POST",
-    Optional.of(emp),
-    new TypeReference<Employee>() {}
-);
+    return cleaned || "download.pdf";
+}
